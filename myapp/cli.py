@@ -80,6 +80,7 @@ def main():
 
 def run_app(skip_update_check: bool = False):
     """Run the main application."""
+    import os
     from myapp.app import MyApp
     
     if not skip_update_check:
@@ -90,29 +91,40 @@ def run_app(skip_update_check: bool = False):
             
             if update_available:
                 print(f"⬆️  New version available: {latest}")
-                response = input("Would you like to update now? [y/N]: ")
-                if response.lower() == 'y':
-                    if updater.install_update():
-                        print("✅ Update installed! Please restart the application.")
-                        sys.exit(0)
+                print("📥 Auto-installing update...")
+                if updater.install_update():
+                    print("✅ Update installed! Restarting application...")
+                    # Auto-restart the application
+                    restart_application()
+                    return
             else:
                 print("✅ You're running the latest version!")
         except Exception as e:
             print(f"⚠️  Could not check for updates: {e}")
     
-    # Run the main application
+    # Run the main application (GUI)
     app = MyApp()
+    app.run()
+
+
+def restart_application():
+    """Restart the application after update."""
+    import os
+    import time
     
+    print("🔄 Restarting in 2 seconds...")
+    time.sleep(2)
+    
+    # Get the path to the myapp executable
     try:
-        app.run()
-        
-        # Keep running (remove this if your app.run() handles its own loop)
-        print("\nPress Ctrl+C to exit.")
-        while True:
-            import time
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n👋 Goodbye update!")
+        # Try to use the installed executable
+        os.execvp("myapp", ["myapp"])
+    except:
+        # Fallback: restart using python
+        import subprocess
+        python = sys.executable
+        subprocess.Popen([python, "-m", "myapp.cli"])
+        sys.exit(0)
 
 
 def handle_update(check_only: bool = False, force: bool = False):

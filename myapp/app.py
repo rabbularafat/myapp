@@ -1,12 +1,12 @@
 """
 Core Application Logic for MyApp
 =================================
-This is where you write your main application functionality.
-The updater and daemon are separate from this core logic.
+Simple GUI application with auto-update support.
 """
 import os
 import platform
 import logging
+import threading
 
 from myapp import __version__, __app_name__
 
@@ -24,52 +24,101 @@ def get_this_device_name():
 
 class MyApp:
     """
-    Main Application Class
-    ----------------------
-    Add your application logic here.
+    Main Application Class with GUI
     """
     
     def __init__(self):
         self.device, self.host = get_this_device_name()
         self.version = __version__
         self.name = __app_name__
+        self.window = None
     
     def run(self):
-        """Main application entry point."""
+        """Main application entry point - launches GUI."""
         print(f"🚀 {self.name} v{self.version} starting...")
         print(f"📱 Device: {self.device}")
         print(f"💻 Host: {self.host}")
-        print("")
-        print("=" * 50)
-        print("  Your application is running!")
-        print("=" * 50)
-        print("")
         
-        # ================================================
-        # ADD YOUR MAIN APPLICATION LOGIC HERE
-        # ================================================
-        
-        self.main_logic()
+        # Launch the GUI
+        self._create_gui()
     
-    def main_logic(self):
-        """
-        Your main application logic goes here.
-        This is where you implement your actual functionality.
-        """
-        # Example: Print device info
-        thisDevice, thisDeviceHost = get_this_device_name()
-        print(f"thisDevice: {thisDevice}")
-        print(f"thisDeviceHost: {thisDeviceHost}")
+    def _create_gui(self):
+        """Create and run the GUI window."""
+        try:
+            import tkinter as tk
+            from tkinter import font as tkfont
+        except ImportError:
+            print("❌ tkinter not available. Running in terminal mode.")
+            print("   Install with: sudo apt-get install python3-tk")
+            self._terminal_mode()
+            return
         
-        # TODO: Add your actual application logic below
-        # Examples:
-        # - Connect to a database
-        # - Start a web server
-        # - Process files
-        # - Run a GUI
-        # - etc.
+        # Create main window
+        self.window = tk.Tk()
+        self.window.title(f"{self.name} v{self.version}")
         
-        print("\n📝 Add your custom logic in myapp/app.py -> main_logic()")
+        # Window size and position
+        window_width = 400
+        window_height = 200
+        
+        # Center on screen
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        self.window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        # Styling
+        self.window.configure(bg='#1a1a2e')
+        
+        # Create main frame
+        main_frame = tk.Frame(self.window, bg='#1a1a2e')
+        main_frame.pack(expand=True, fill='both')
+        
+        # Welcome text
+        try:
+            custom_font = tkfont.Font(family="Helvetica", size=24, weight="bold")
+        except:
+            custom_font = None
+        
+        welcome_label = tk.Label(
+            main_frame,
+            text="Welcome to MyApp",
+            font=custom_font if custom_font else ("Helvetica", 24, "bold"),
+            fg='#e94560',
+            bg='#1a1a2e'
+        )
+        welcome_label.pack(expand=True)
+        
+        # Version label
+        version_label = tk.Label(
+            main_frame,
+            text=f"v{self.version}",
+            font=("Helvetica", 10),
+            fg='#888888',
+            bg='#1a1a2e'
+        )
+        version_label.pack(pady=(0, 20))
+        
+        # Run the GUI main loop
+        self.window.mainloop()
+    
+    def _terminal_mode(self):
+        """Fallback terminal mode if GUI is not available."""
+        print("")
+        print("=" * 50)
+        print("  Welcome to MyApp")
+        print(f"  Version: {self.version}")
+        print("=" * 50)
+        print("")
+        print("Press Ctrl+C to exit.")
+        
+        try:
+            while True:
+                import time
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n👋 Goodbye!")
 
 
 def main():

@@ -21,8 +21,8 @@ VERSION="${1:-1.0.0}"
 RELEASE="${2:-1}"
 ARCH="all"
 MAINTAINER="Your Name <you@example.com>"
-DESCRIPTION="A self-updating Python application with daemon support"
-DEPENDS="python3 (>= 3.8)"
+DESCRIPTION="A self-updating Python application with GUI and daemon support"
+DEPENDS="python3 (>= 3.8), python3-tk"
 
 # Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
