@@ -1,138 +1,95 @@
 # GitHub Actions workflow for building and releasing MyApp
+# =========================================================
 # This workflow:
-# 1. Runs tests on every push/PR
-# 2. Builds .deb package on tags
-# 3. Creates GitHub release with .deb attached
-# 4. Updates APT repository on GitHub Pages
+# 1. Builds .deb package when you push a version tag (v1.0.0, v1.1.0, etc.)
+# 2. Creates GitHub release with .deb attached
+# 3. Updates latest-version.txt for auto-update checking
+#
+# HOW TO RELEASE:
+#   git tag v1.1.0
+#   git push origin v1.1.0
+# =========================================================
 
 name: Build and Release
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0, v1.1.0, etc.
 
 jobs:
-  test:
+  build-and-release:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    permissions:
+      contents: write
     
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      
-      - name: Run tests
-        run: |
-          pytest tests/ -v --cov=myapp --cov-report=xml
-      
-      - name: Lint
-        run: |
-          flake8 myapp/ --max-line-length=100
-
-  build-deb:
-    needs: test
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
       
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+      
+      - name: Update version in source files
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          
+          # Update __init__.py
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" myapp/__init__.py
+          
+          # Update latest-version.txt
+          echo "$VERSION" > latest-version.txt
+          
+          echo "Updated version files to $VERSION"
       
       - name: Build .deb package
         run: |
           chmod +x scripts/build-deb.sh
           ./scripts/build-deb.sh ${{ steps.version.outputs.VERSION }}
       
-      - name: Upload .deb artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: deb-package
-          path: dist/*.deb
-
-  release:
-    needs: build-deb
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download .deb artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: deb-package
-          path: dist/
-      
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: dist/*.deb
           generate_release_notes: true
-          draft: false
-          prerelease: false
+          body: |
+            ## Installation
+            
+            ### First-time install:
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/myapp_${{ steps.version.outputs.VERSION }}-1_all.deb
+            sudo dpkg -i myapp_${{ steps.version.outputs.VERSION }}-1_all.deb
+            sudo apt-get install -f -y  # Fix dependencies if needed
+            ```
+            
+            ### If already installed:
+            The app will auto-update automatically, or run:
+            ```bash
+            myapp update
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  update-apt-repo:
-    needs: release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-      pages: write
-    
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          fetch-depth: 0
       
-      - name: Download .deb artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: deb-package
-          path: pool/main/
-      
-      - name: Update APT repository
+      - name: Update latest-version.txt in main branch
         run: |
-          # Create Packages file
-          dpkg-scanpackages --arch all pool/ > dists/stable/main/binary-all/Packages
-          gzip -k -f dists/stable/main/binary-all/Packages
+          VERSION=${{ steps.version.outputs.VERSION }}
           
-          # Update Release file
-          cd dists/stable
-          apt-ftparchive release . > Release
-      
-      - name: Update latest-version.txt
-        run: |
-          echo "${{ github.ref_name }}" | sed 's/^v//' > latest-version.txt
-      
-      - name: Commit and push
-        run: |
+          # Configure git
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add .
-          git commit -m "Update repository for ${{ github.ref_name }}"
-          git push
+          
+          # Fetch main branch
+          git fetch origin main
+          git checkout main
+          
+          # Update version file
+          echo "$VERSION" > latest-version.txt
+          
+          # Commit and push
+          git add latest-version.txt
+          git commit -m "Update latest-version.txt to $VERSION [skip ci]" || echo "No changes to commit"
+          git push origin main

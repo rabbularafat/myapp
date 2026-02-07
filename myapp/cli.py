@@ -80,7 +80,7 @@ def main():
 
 def run_app(skip_update_check: bool = False):
     """Run the main application."""
-    print(f"🚀 {__app_name__} v{__version__} starting...")
+    from myapp.app import MyApp
     
     if not skip_update_check:
         print("📡 Checking for updates...")
@@ -100,17 +100,14 @@ def run_app(skip_update_check: bool = False):
         except Exception as e:
             print(f"⚠️  Could not check for updates: {e}")
     
-    # Your main application logic goes here
-    print("")
-    print("=" * 50)
-    print("  Welcome to MyApp!")
-    print("  Your application is running successfully.")
-    print("=" * 50)
-    print("")
-    print("Press Ctrl+C to exit.")
+    # Run the main application
+    app = MyApp()
     
     try:
-        # Example: Main loop or application logic
+        app.run()
+        
+        # Keep running (remove this if your app.run() handles its own loop)
+        print("\nPress Ctrl+C to exit.")
         while True:
             import time
             time.sleep(1)

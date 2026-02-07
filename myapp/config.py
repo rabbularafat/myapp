@@ -12,7 +12,7 @@ GITHUB_OWNER = "rabbularafat"
 GITHUB_REPO = "myapp"
 GITHUB_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 
-# Alternative: Direct URL to version file (if self-hosting)
+# Alternative: Direct URL to version file (for checking updates)
 VERSION_FILE_URL = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/latest-version.txt"
 
 # Local paths
