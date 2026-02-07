@@ -112,7 +112,7 @@ def run_app(skip_update_check: bool = False):
             import time
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        print("\n👋 Goodbye update!")
 
 
 def handle_update(check_only: bool = False, force: bool = False):
