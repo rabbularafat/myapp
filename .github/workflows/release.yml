@@ -1,13 +1,10 @@
 # GitHub Actions workflow for building and releasing MyApp
 # =========================================================
-# This workflow:
-# 1. Builds .deb package when you push a version tag (v1.0.0, v1.1.0, etc.)
-# 2. Creates GitHub release with .deb attached
-# 3. Updates latest-version.txt for auto-update checking
+# TRIGGERS: Only on version tags (v1.0.0, v1.1.0, etc.)
 #
 # HOW TO RELEASE:
-#   git tag v1.1.0
-#   git push origin v1.1.0
+#   git tag v1.0.0
+#   git push origin v1.0.0
 # =========================================================
 
 name: Build and Release
@@ -15,7 +12,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # Triggers on version tags like v1.0.0, v1.1.0, etc.
+      - 'v*'
 
 jobs:
   build-and-release:
@@ -26,13 +23,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Extract version from tag
         id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
+          echo "🏷️ Building version: $VERSION"
       
       - name: Update version in source files
         run: |
@@ -44,12 +43,16 @@ jobs:
           # Update latest-version.txt
           echo "$VERSION" > latest-version.txt
           
-          echo "Updated version files to $VERSION"
+          echo "✅ Updated version files to $VERSION"
+          cat myapp/__init__.py | head -5
       
       - name: Build .deb package
         run: |
           chmod +x scripts/build-deb.sh
           ./scripts/build-deb.sh ${{ steps.version.outputs.VERSION }}
+          
+          echo "📦 Built packages:"
+          ls -la dist/
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -57,17 +60,17 @@ jobs:
           files: dist/*.deb
           generate_release_notes: true
           body: |
-            ## Installation
+            ## 🚀 MyApp v${{ steps.version.outputs.VERSION }}
             
-            ### First-time install:
+            ### First-time Installation
             ```bash
             wget https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/myapp_${{ steps.version.outputs.VERSION }}-1_all.deb
             sudo dpkg -i myapp_${{ steps.version.outputs.VERSION }}-1_all.deb
-            sudo apt-get install -f -y  # Fix dependencies if needed
+            sudo apt-get install -f -y
             ```
             
-            ### If already installed:
-            The app will auto-update automatically, or run:
+            ### Already Installed?
+            Your app will auto-update, or run:
             ```bash
             myapp update
             ```
@@ -82,8 +85,10 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           
-          # Fetch main branch
-          git fetch origin main
+          # Stash local changes
+          git stash
+          
+          # Checkout main branch
           git checkout main
           
           # Update version file
@@ -91,5 +96,7 @@ jobs:
           
           # Commit and push
           git add latest-version.txt
-          git commit -m "Update latest-version.txt to $VERSION [skip ci]" || echo "No changes to commit"
+          git commit -m "🔖 Update latest-version.txt to $VERSION [skip ci]" || echo "No changes"
           git push origin main
+          
+          echo "✅ Updated latest-version.txt on main branch"
