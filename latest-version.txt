@@ -1,0 +1,4 @@
+# Latest version of MyApp
+# This file is read by the auto-updater to check for new versions
+# Format: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-RELEASE
+1.0.0
