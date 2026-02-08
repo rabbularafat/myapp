@@ -235,7 +235,7 @@ git push
 git add .
 git commit -m "your message"
 # 3. ALWAYS push to main FIRST!
-git push origin main       # ← DON'T FORGET THIS!
+git push origin main
 # 4. Then create and push tag
 git tag v1.2.2
 git push origin v1.2.2
