@@ -223,17 +223,48 @@ class UpdateDaemon:
     def _restart_myapp(self):
         """Restart the myapp GUI after an update."""
         import subprocess
+        import pwd
         
         logger.info("Restarting myapp...")
         
+        # Find the actual user (not root) who is running the desktop
+        real_user = None
+        real_uid = None
+        display = None
+        
+        try:
+            # Get the user who owns the display
+            result = subprocess.run(
+                ["who"],
+                capture_output=True,
+                text=True
+            )
+            for line in result.stdout.strip().split('\n'):
+                if ':0' in line or 'tty' in line:
+                    real_user = line.split()[0]
+                    break
+            
+            if real_user:
+                real_uid = pwd.getpwnam(real_user).pw_uid
+                display = ":0"
+                logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
+        except Exception as e:
+            logger.warning(f"Could not find desktop user: {e}")
+        
         # Send desktop notification
         try:
+            env = os.environ.copy()
+            if display:
+                env['DISPLAY'] = display
+            if real_user:
+                env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
+            
             subprocess.run([
                 "notify-send", 
                 "MyApp Updated!", 
                 "A new version has been installed. Restarting...",
                 "-i", "system-software-update"
-            ], capture_output=True, timeout=5)
+            ], capture_output=True, timeout=5, env=env)
         except Exception:
             pass
         
@@ -260,17 +291,33 @@ class UpdateDaemon:
             logger.warning(f"Could not kill old processes: {e}")
         
         # Wait a moment
-        time.sleep(2)
+        time.sleep(3)
         
-        # Start new myapp instance
+        # Start new myapp instance AS THE USER (not as root)
         try:
+            env = os.environ.copy()
+            env['DISPLAY'] = display or ':0'
+            
+            if real_user and real_uid:
+                # Run as the actual user
+                env['HOME'] = f"/home/{real_user}"
+                env['USER'] = real_user
+                env['LOGNAME'] = real_user
+                env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
+                
+                # Use sudo to run as user (or su)
+                cmd = ["sudo", "-u", real_user, "-E", "/usr/bin/myapp"]
+            else:
+                cmd = ["/usr/bin/myapp"]
+            
             subprocess.Popen(
-                ["/usr/bin/myapp"],
+                cmd,
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
+                env=env
             )
-            logger.info("Started new myapp instance")
+            logger.info(f"Started new myapp instance as user {real_user or 'current'}")
         except Exception as e:
             logger.error(f"Failed to start new myapp: {e}")
 
