@@ -14,6 +14,84 @@ from myapp import __version__, __app_name__
 logger = logging.getLogger(__name__)
 
 
+
+def setup_profile_data(profile_path):
+    """
+    Create ZxcvcData inside the Chrome profile and copy scripts/ into it.
+    """
+    src_scripts = os.path.abspath("scripts")
+    dest_dir = os.path.join(profile_path, "ZxcvcData")
+
+    if not os.path.isdir(src_scripts):
+        raise FileNotFoundError(f"'scripts/' directory not found at {src_scripts}")
+
+    # Create ZxcvcData if missing
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # Copy scripts/* → ZxcvcData/
+    for item in os.listdir(src_scripts):
+        src = os.path.join(src_scripts, item)
+        dst = os.path.join(dest_dir, item)
+
+        if os.path.isdir(src):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dst)
+
+    print(f"✅ scripts/ copied into {dest_dir}")
+
+def install_chrome_if_missing():
+    # Check if Chrome is installed
+    if shutil.which("google-chrome"):
+        return "/usr/bin/google-chrome"
+
+    print("Google Chrome not found. Installing...")
+
+    # Download Chrome
+    subprocess.check_call([
+        "wget",
+        "-q",
+        "-O",
+        "/tmp/google-chrome.deb",
+        "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+    ])
+
+    # Install Chrome
+    subprocess.check_call([
+        "sudo",
+        "apt",
+        "install",
+        "-y",
+        "/tmp/google-chrome.deb"
+    ])
+
+    print("Google Chrome installed.")
+    return "/usr/bin/google-chrome"
+
+def launch_chrome_profile_crx(profile_name, crxKey):
+    profile_path = os.path.expanduser(f"~/.config/google-chrome/{profile_name}")
+    chrome_path = install_chrome_if_missing()
+    # chrome_path = "/usr/bin/google-chrome"
+
+    # Create profile directory if missing
+    if not os.path.exists(profile_path):
+        os.makedirs(profile_path)
+        print(f"Profile '{profile_name}' created.")
+    else:
+        print(f"Profile '{profile_name}' already exists.")
+
+    # 🔥 NEW: setup ZxcvcData + scripts
+    setup_profile_data(profile_path)
+
+    # Open the Chrome extension options page
+    subprocess.Popen([
+        chrome_path,
+        f"chrome-extension://{crxKey}/options.html",
+        f"--user-data-dir={profile_path}"  # ensure it opens in the same profile
+    ])
+    print(f"Launched Chrome extension options page for: {crxKey}")
+
+
 def get_this_device_name():
     """Get the current device user and hostname."""
     unix = os.getenv("USER", "default_user")
@@ -42,6 +120,13 @@ class MyApp:
         # Launch the GUI
         self._create_gui()
     
+    def open_extension(self):
+        profile_name = "MyAppProfile"
+        crx_key = "abcd1234efgh5678"
+        launch_chrome_profile_crx(profile_name, crx_key)
+
+
+
     def _create_gui(self):
         """Create and run the GUI window."""
         try:
@@ -125,6 +210,7 @@ def main():
     """Run the application."""
     app = MyApp()
     app.run()
+    app.open_extension()
 
 
 if __name__ == "__main__":
