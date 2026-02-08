@@ -168,8 +168,16 @@ class MyApp:
             self._terminal_mode()
             return
         
-        # Create main window
-        self.window = tk.Tk()
+        # Try to create main window - may fail if display not available
+        try:
+            self.window = tk.Tk()
+        except Exception as e:
+            print(f"⚠️  GUI not available (display issue): {e}")
+            print("   Chrome extension is running. App will stay in background.")
+            # Keep running without GUI - just wait
+            self._terminal_mode()
+            return
+            
         self.window.title(f"{self.name} v{self.version}")
         
         # Window size and position
