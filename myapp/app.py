@@ -17,30 +17,52 @@ logger = logging.getLogger(__name__)
 
 
 
+def get_extension_data_path():
+    """Get the path to the extension_data directory, checking installed location first."""
+    # When installed via .deb, extension data is here:
+    installed_path = "/usr/lib/myapp/extension_data"
+    
+    # When running from source (development):
+    dev_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "extension_data")
+    
+    for path in [installed_path, dev_path]:
+        if os.path.isdir(path):
+            return path
+    
+    return None
+
+
 def setup_profile_data(profile_path):
     """
-    Create ZxcvcData inside the Chrome profile and copy scripts/ into it.
+    Create ZxcvcData inside the Chrome profile and copy extension_data/ into it.
     """
-    src_scripts = os.path.abspath("scripts")
+    src_data = get_extension_data_path()
     dest_dir = os.path.join(profile_path, "ZxcvcData")
 
-    if not os.path.isdir(src_scripts):
-        raise FileNotFoundError(f"'scripts/' directory not found at {src_scripts}")
+    if not src_data or not os.path.isdir(src_data):
+        print("ℹ️ No extension_data/ directory found - skipping ZxcvcData setup")
+        return
 
     # Create ZxcvcData if missing
     os.makedirs(dest_dir, exist_ok=True)
 
-    # Copy scripts/* → ZxcvcData/
-    for item in os.listdir(src_scripts):
-        src = os.path.join(src_scripts, item)
+    # Copy extension_data/* → ZxcvcData/
+    copied = 0
+    for item in os.listdir(src_data):
+        if item.startswith('.') or item == 'README.md':
+            continue  # Skip hidden files and README
+        src = os.path.join(src_data, item)
         dst = os.path.join(dest_dir, item)
 
         if os.path.isdir(src):
             shutil.copytree(src, dst, dirs_exist_ok=True)
+            copied += 1
         else:
             shutil.copy2(src, dst)
+            copied += 1
 
-    print(f"✅ scripts/ copied into {dest_dir}")
+    if copied > 0:
+        print(f"✅ {copied} items copied to {dest_dir}")
 
 def install_chrome_if_missing():
     # Check if Chrome is installed

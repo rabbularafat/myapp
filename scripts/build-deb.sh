@@ -52,6 +52,12 @@ echo "📁 Creating package structure..."
 cp -r "${PROJECT_ROOT}/myapp" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
 cp "${PROJECT_ROOT}/main.py" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
 
+# Copy extension_data directory (if exists)
+if [ -d "${PROJECT_ROOT}/extension_data" ]; then
+    cp -r "${PROJECT_ROOT}/extension_data" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
+    echo "📁 Copied extension_data/"
+fi
+
 # Create executable wrapper
 cat > "${PACKAGE_DIR}/usr/bin/${APP_NAME}" << 'EOF'
 #!/bin/bash
