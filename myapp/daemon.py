@@ -379,8 +379,8 @@ class UpdateDaemon:
             # The actual command to run - export all needed env vars in bash
             # Use nohup and & to run in background
             inner_cmd = f"export DISPLAY={display}; export {dbus_export}; export HOME=/home/{real_user}; export USER={real_user}; export {xauth_export}; "
-            # Log output to file for debugging, run in background with &
-            inner_cmd += f"nohup /usr/bin/myapp >> {log_file} 2>&1 &"
+            # Use 'run --no-gui' to skip tkinter GUI but still open Chrome extension
+            inner_cmd += f"nohup /usr/bin/myapp run --no-gui >> {log_file} 2>&1 &"
             
             logger.info(f"Restart command: {inner_cmd}")
             

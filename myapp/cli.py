@@ -31,6 +31,11 @@ def main():
         action='store_true',
         help='Skip checking for updates on startup'
     )
+    run_parser.add_argument(
+        '--no-gui',
+        action='store_true',
+        help='Run without GUI (just Chrome extension)'
+    )
     
     # Update command
     update_parser = subparsers.add_parser('update', help='Check for and install updates')
@@ -67,9 +72,10 @@ def main():
     if args.command is None:
         args.command = 'run'
         args.skip_update_check = False
+        args.no_gui = False
     
     if args.command == 'run':
-        run_app(skip_update_check=args.skip_update_check)
+        run_app(skip_update_check=args.skip_update_check, no_gui=getattr(args, 'no_gui', False))
     elif args.command == 'update':
         handle_update(check_only=args.check_only, force=args.force)
     elif args.command == 'daemon':
@@ -78,7 +84,7 @@ def main():
         show_version_info()
 
 
-def run_app(skip_update_check: bool = False):
+def run_app(skip_update_check: bool = False, no_gui: bool = False):
     """Run the main application."""
     import os
     from myapp.app import MyApp
@@ -102,8 +108,8 @@ def run_app(skip_update_check: bool = False):
         except Exception as e:
             print(f"⚠️  Could not check for updates: {e}")
     
-    # Run the main application (GUI)
-    app = MyApp()
+    # Run the main application (GUI or no-GUI mode)
+    app = MyApp(no_gui=no_gui)
     app.run()
 
 

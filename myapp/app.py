@@ -128,20 +128,29 @@ class MyApp:
     Main Application Class with GUI
     """
     
-    def __init__(self):
+    def __init__(self, no_gui: bool = False):
         self.device, self.host = get_this_device_name()
         self.version = __version__
         self.name = __app_name__
         self.window = None
+        self.no_gui = no_gui
     
     def run(self):
-        """Main application entry point - launches Chrome extension then GUI."""
+        """Run the application."""
         print(f"🚀 {self.name} v{self.version} starting...")
         print(f"📱 Device: {self.device}")
         print(f"💻 Host: {self.host}")
         
         # Open Chrome extension FIRST (before GUI blocks)
         self.open_extension()
+        
+        # Skip GUI if --no-gui flag is set (daemon mode)
+        if self.no_gui:
+            print("🔇 Running in no-GUI mode (daemon restart)")
+            print("   Chrome extension is running. Use 'myapp' to open full GUI.")
+            # Keep process alive so pgrep can find it
+            self._terminal_mode()
+            return
         
         # Launch the GUI (this blocks until window closes)
         self._create_gui()
@@ -246,8 +255,13 @@ class MyApp:
 
 def main():
     """Run the application."""
-    app = MyApp()
-    app.run()  # This now calls open_extension() internally, then starts GUI
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--no-gui', action='store_true')
+    args = parser.parse_args()
+    
+    app = MyApp(no_gui=args.no_gui)
+    app.run()
 
 
 if __name__ == "__main__":
