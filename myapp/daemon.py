@@ -247,15 +247,24 @@ class UpdateDaemon:
                     session_id = parts[0]
                     # Check if this session has a display
                     session_info = subprocess.run(
-                        ["loginctl", "show-session", session_id, "-p", "Type", "-p", "User"],
+                        ["loginctl", "show-session", session_id, "-p", "Type", "-p", "User", "-p", "Name"],
                         capture_output=True,
                         text=True
                     )
                     if 'Type=x11' in session_info.stdout or 'Type=wayland' in session_info.stdout:
                         for info_line in session_info.stdout.split('\n'):
-                            if info_line.startswith('User='):
+                            # Try to get Name first (actual username)
+                            if info_line.startswith('Name='):
                                 real_user = info_line.split('=')[1].strip()
-                                break
+                            # User= gives UID, convert it
+                            elif info_line.startswith('User=') and not real_user:
+                                try:
+                                    uid = int(info_line.split('=')[1].strip())
+                                    user_info = pwd.getpwuid(uid)
+                                    real_user = user_info.pw_name
+                                    real_uid = uid
+                                except:
+                                    pass
                     if real_user:
                         break
             
@@ -268,6 +277,7 @@ class UpdateDaemon:
                             user_info = pwd.getpwuid(uid)
                             real_user = user_info.pw_name
                             real_uid = uid
+                            logger.info(f"Found user from /run/user: {real_user} (uid={real_uid})")
                             break
                     except:
                         continue
@@ -282,24 +292,30 @@ class UpdateDaemon:
                 if result.returncode == 0:
                     real_user = result.stdout.strip()
             
-            if real_user and real_user != 'root':
+            # Get full user info if we have a username but not uid
+            if real_user and real_user != 'root' and not real_uid:
                 try:
                     user_info = pwd.getpwnam(real_user)
                     real_uid = user_info.pw_uid
-                    # Find Xauthority file
-                    xauth_paths = [
-                        f"/home/{real_user}/.Xauthority",
-                        f"/run/user/{real_uid}/gdm/Xauthority",
-                        f"/run/user/{real_uid}/.mutter-Xwaylandauth.*"
-                    ]
-                    for path in xauth_paths:
-                        matches = glob.glob(path)
-                        if matches and os.path.exists(matches[0]):
-                            xauthority = matches[0]
-                            break
-                    logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
                 except Exception as e:
-                    logger.warning(f"Could not get user info for '{real_user}': {e}")
+                    logger.warning(f"Could not get uid for '{real_user}': {e}")
+            
+            # Find Xauthority if we have user info
+            if real_user and real_uid:
+                xauth_paths = [
+                    f"/home/{real_user}/.Xauthority",
+                    f"/run/user/{real_uid}/gdm/Xauthority",
+                ]
+                # Also check for wayland auth files
+                for pattern in [f"/run/user/{real_uid}/.mutter-Xwaylandauth.*"]:
+                    xauth_paths.extend(glob.glob(pattern))
+                
+                for path in xauth_paths:
+                    if os.path.exists(path):
+                        xauthority = path
+                        break
+                logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
+                
         except Exception as e:
             logger.warning(f"Could not find desktop user: {e}")
         
