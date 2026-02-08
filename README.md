@@ -47,7 +47,7 @@ GITHUB_OWNER = "your-username"
 GITHUB_REPO = "myapp"
 
 # Update settings
-CHECK_INTERVAL_HOURS = 6  # How often to check
+CHECK_INTERVAL_HOURS = 1  # How often to check
 AUTO_UPDATE = True        # Auto-install updates
 ```
 
