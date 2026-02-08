@@ -224,53 +224,73 @@ class UpdateDaemon:
         """Restart the myapp GUI after an update."""
         import subprocess
         import pwd
+        import glob
         
         logger.info("Restarting myapp...")
         
         # Find the actual user (not root) who is running the desktop
         real_user = None
         real_uid = None
-        display = None
+        display = ":0"
+        xauthority = None
         
         try:
-            # Get the user who owns the display
-            result = subprocess.run(
-                ["who"],
-                capture_output=True,
-                text=True
-            )
+            # Method 1: Check who is logged in
+            result = subprocess.run(["who"], capture_output=True, text=True)
             for line in result.stdout.strip().split('\n'):
                 if ':0' in line or 'tty' in line:
                     real_user = line.split()[0]
                     break
             
-            if real_user:
-                real_uid = pwd.getpwnam(real_user).pw_uid
-                display = ":0"
-                logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
+            # Method 2: Check DISPLAY owner if who didn't work
+            if not real_user:
+                result = subprocess.run(
+                    ["ps", "aux"],
+                    capture_output=True,
+                    text=True
+                )
+                for line in result.stdout.split('\n'):
+                    if 'Xorg' in line or 'gnome-session' in line or 'plasma' in line:
+                        real_user = line.split()[0]
+                        break
+            
+            if real_user and real_user != 'root':
+                try:
+                    real_uid = pwd.getpwnam(real_user).pw_uid
+                    # Find Xauthority file
+                    xauth_paths = [
+                        f"/home/{real_user}/.Xauthority",
+                        f"/run/user/{real_uid}/gdm/Xauthority",
+                        f"/tmp/.X0-lock"
+                    ]
+                    for path in xauth_paths:
+                        if os.path.exists(path):
+                            xauthority = path
+                            break
+                    logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
+                except Exception as e:
+                    logger.warning(f"Could not get user info: {e}")
         except Exception as e:
             logger.warning(f"Could not find desktop user: {e}")
         
         # Send desktop notification
         try:
-            env = os.environ.copy()
-            if display:
-                env['DISPLAY'] = display
-            if real_user:
-                env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
+            notify_env = os.environ.copy()
+            notify_env['DISPLAY'] = display
+            if real_uid:
+                notify_env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
             
             subprocess.run([
                 "notify-send", 
                 "MyApp Updated!", 
                 "A new version has been installed. Restarting...",
                 "-i", "system-software-update"
-            ], capture_output=True, timeout=5, env=env)
+            ], capture_output=True, timeout=5, env=notify_env)
         except Exception:
             pass
         
         # Kill any running myapp processes (except this daemon)
         try:
-            # Find myapp processes
             result = subprocess.run(
                 ["pgrep", "-f", "myapp.*main.py"],
                 capture_output=True,
@@ -290,36 +310,70 @@ class UpdateDaemon:
         except Exception as e:
             logger.warning(f"Could not kill old processes: {e}")
         
-        # Wait a moment
+        # Wait for old process to fully exit
         time.sleep(3)
         
-        # Start new myapp instance AS THE USER (not as root)
-        try:
-            env = os.environ.copy()
-            env['DISPLAY'] = display or ':0'
+        # Start new myapp instance
+        if real_user and real_uid:
+            # Try multiple methods to start as user
+            methods = [
+                # Method 1: runuser (systemd standard)
+                ["runuser", "-u", real_user, "--", "/usr/bin/myapp"],
+                # Method 2: sudo with preserved env
+                ["sudo", "-u", real_user, f"DISPLAY={display}", f"HOME=/home/{real_user}", "/usr/bin/myapp"],
+                # Method 3: su with command
+                ["su", "-", real_user, "-c", f"DISPLAY={display} /usr/bin/myapp"],
+            ]
             
-            if real_user and real_uid:
-                # Run as the actual user
-                env['HOME'] = f"/home/{real_user}"
-                env['USER'] = real_user
-                env['LOGNAME'] = real_user
-                env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
-                
-                # Use sudo to run as user (or su)
-                cmd = ["sudo", "-u", real_user, "-E", "/usr/bin/myapp"]
-            else:
-                cmd = ["/usr/bin/myapp"]
+            for i, cmd in enumerate(methods):
+                try:
+                    env = os.environ.copy()
+                    env['DISPLAY'] = display
+                    env['HOME'] = f"/home/{real_user}"
+                    env['USER'] = real_user
+                    env['LOGNAME'] = real_user
+                    env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
+                    if xauthority:
+                        env['XAUTHORITY'] = xauthority
+                    
+                    logger.info(f"Trying method {i+1}: {' '.join(cmd)}")
+                    
+                    process = subprocess.Popen(
+                        cmd,
+                        start_new_session=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        env=env
+                    )
+                    
+                    # Wait a bit to see if it starts
+                    time.sleep(2)
+                    
+                    # Check if process is still running
+                    if process.poll() is None:
+                        logger.info(f"Started myapp successfully with method {i+1}")
+                        return
+                    else:
+                        stdout, stderr = process.communicate(timeout=1)
+                        logger.warning(f"Method {i+1} failed: {stderr.decode()[:200]}")
+                        
+                except Exception as e:
+                    logger.warning(f"Method {i+1} error: {e}")
+                    continue
             
-            subprocess.Popen(
-                cmd,
-                start_new_session=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=env
-            )
-            logger.info(f"Started new myapp instance as user {real_user or 'current'}")
-        except Exception as e:
-            logger.error(f"Failed to start new myapp: {e}")
+            logger.error("All restart methods failed!")
+        else:
+            # Fallback: try direct execution
+            try:
+                subprocess.Popen(
+                    ["/usr/bin/myapp"],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                logger.info("Started myapp (fallback method)")
+            except Exception as e:
+                logger.error(f"Fallback restart failed: {e}")
 
 
 def main():
