@@ -208,6 +208,8 @@ class UpdateDaemon:
                     updated = check_and_update(auto_install=True)
                     if updated:
                         logger.info("Update installed successfully!")
+                        # Restart the myapp GUI if it's running
+                        self._restart_myapp()
                 except Exception as e:
                     logger.error(f"Update check failed: {e}")
                 
@@ -217,6 +219,60 @@ class UpdateDaemon:
             time.sleep(60)  # Check every minute if interval has passed
         
         logger.info("Daemon stopped.")
+    
+    def _restart_myapp(self):
+        """Restart the myapp GUI after an update."""
+        import subprocess
+        
+        logger.info("Restarting myapp...")
+        
+        # Send desktop notification
+        try:
+            subprocess.run([
+                "notify-send", 
+                "MyApp Updated!", 
+                "A new version has been installed. Restarting...",
+                "-i", "system-software-update"
+            ], capture_output=True, timeout=5)
+        except Exception:
+            pass
+        
+        # Kill any running myapp processes (except this daemon)
+        try:
+            # Find myapp processes
+            result = subprocess.run(
+                ["pgrep", "-f", "myapp.*main.py"],
+                capture_output=True,
+                text=True
+            )
+            pids = result.stdout.strip().split('\n')
+            my_pid = str(os.getpid())
+            
+            for pid in pids:
+                pid = pid.strip()
+                if pid and pid != my_pid:
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                        logger.info(f"Killed old myapp process {pid}")
+                    except:
+                        pass
+        except Exception as e:
+            logger.warning(f"Could not kill old processes: {e}")
+        
+        # Wait a moment
+        time.sleep(2)
+        
+        # Start new myapp instance
+        try:
+            subprocess.Popen(
+                ["/usr/bin/myapp"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            logger.info("Started new myapp instance")
+        except Exception as e:
+            logger.error(f"Failed to start new myapp: {e}")
 
 
 def main():
