@@ -361,48 +361,60 @@ class UpdateDaemon:
         
         # Start new myapp instance
         if real_user and real_uid:
+            # Build the command that will be run as the user
+            # We need to export the display environment INSIDE the user's shell
+            xauth_export = f"XAUTHORITY={xauthority}" if xauthority else ""
+            dbus_export = f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{real_uid}/bus"
+            
+            # The actual command to run - export all needed env vars in bash
+            # Use nohup and & to run in background, setsid to create new session
+            inner_cmd = f"export DISPLAY={display}; export {dbus_export}; export HOME=/home/{real_user}; "
+            if xauth_export:
+                inner_cmd += f"export {xauth_export}; "
+            # Use nohup and redirect output, run in background with &
+            inner_cmd += "nohup /usr/bin/myapp > /dev/null 2>&1 &"
+            
             # Try multiple methods to start as user
             methods = [
-                # Method 1: runuser (systemd standard)
-                ["runuser", "-u", real_user, "--", "/usr/bin/myapp"],
-                # Method 2: sudo with preserved env
-                ["sudo", "-u", real_user, f"DISPLAY={display}", f"HOME=/home/{real_user}", "/usr/bin/myapp"],
-                # Method 3: su with command
-                ["su", "-", real_user, "-c", f"DISPLAY={display} /usr/bin/myapp"],
+                # Method 1: runuser with bash -c
+                ["runuser", "-u", real_user, "--", "bash", "-c", inner_cmd],
+                # Method 2: sudo with bash -c  
+                ["sudo", "-u", real_user, "bash", "-c", inner_cmd],
+                # Method 3: su with bash
+                ["su", "-", real_user, "-c", inner_cmd],
             ]
             
             for i, cmd in enumerate(methods):
                 try:
-                    env = os.environ.copy()
-                    env['DISPLAY'] = display
-                    env['HOME'] = f"/home/{real_user}"
-                    env['USER'] = real_user
-                    env['LOGNAME'] = real_user
-                    env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
-                    if xauthority:
-                        env['XAUTHORITY'] = xauthority
+                    logger.info(f"Trying method {i+1}: {cmd[0]} ...")
                     
-                    logger.info(f"Trying method {i+1}: {' '.join(cmd)}")
-                    
-                    process = subprocess.Popen(
+                    result = subprocess.run(
                         cmd,
-                        start_new_session=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        env=env
+                        capture_output=True,
+                        timeout=10,
+                        cwd=f"/home/{real_user}"
                     )
                     
-                    # Wait a bit to see if it starts
+                    # Since we use nohup ... &, bash exits immediately with code 0
+                    # Wait a moment then check if myapp is running
                     time.sleep(2)
                     
-                    # Check if process is still running
-                    if process.poll() is None:
-                        logger.info(f"Started myapp successfully with method {i+1}")
+                    # Check if myapp process is now running
+                    check = subprocess.run(
+                        ["pgrep", "-f", "myapp.*main.py"],
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if check.returncode == 0 and check.stdout.strip():
+                        logger.info(f"Started myapp successfully with method {i+1} (pid: {check.stdout.strip()})")
                         return
                     else:
-                        stdout, stderr = process.communicate(timeout=1)
-                        logger.warning(f"Method {i+1} failed: {stderr.decode()[:200]}")
+                        full_output = result.stdout.decode() + result.stderr.decode()
+                        logger.warning(f"Method {i+1}: bash exited but myapp not running. Output: {full_output[:200]}")
                         
+                except subprocess.TimeoutExpired:
+                    logger.warning(f"Method {i+1}: timeout")
                 except Exception as e:
                     logger.warning(f"Method {i+1} error: {e}")
                     continue
