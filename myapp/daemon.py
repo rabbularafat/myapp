@@ -366,13 +366,18 @@ class UpdateDaemon:
             xauth_export = f"XAUTHORITY={xauthority}" if xauthority else ""
             dbus_export = f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{real_uid}/bus"
             
+            # Log file for debugging
+            log_file = "/tmp/myapp-restart.log"
+            
             # The actual command to run - export all needed env vars in bash
-            # Use nohup and & to run in background, setsid to create new session
-            inner_cmd = f"export DISPLAY={display}; export {dbus_export}; export HOME=/home/{real_user}; "
+            # Use nohup and & to run in background
+            inner_cmd = f"export DISPLAY={display}; export {dbus_export}; export HOME=/home/{real_user}; export USER={real_user}; "
             if xauth_export:
                 inner_cmd += f"export {xauth_export}; "
-            # Use nohup and redirect output, run in background with &
-            inner_cmd += "nohup /usr/bin/myapp > /dev/null 2>&1 &"
+            # Log output to file for debugging, run in background with &
+            inner_cmd += f"nohup /usr/bin/myapp >> {log_file} 2>&1 &"
+            
+            logger.info(f"Restart command: {inner_cmd}")
             
             # Try multiple methods to start as user
             methods = [
