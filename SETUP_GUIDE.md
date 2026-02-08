@@ -230,3 +230,18 @@ The system is now fully automated:
 - **User installs once** → Auto-updates forever! 🎉
 PS D:\backEnd\app> git tag v1.1.0
 PS D:\backEnd\app> git push origin v1.1.0
+
+wget https://github.com/rabbularafat/myapp/releases/download/v1.2.0/myapp_1.2.0-1_all.deb
+sudo dpkg -i myapp_1.2.0-1_all.deb
+# Restart the daemon to pick up new code
+sudo systemctl restart myapp-updater
+# Verify it's running
+systemctl status myapp-updater
+
+# remove 
+sudo apt remove myapp
+sudo dpkg -r myapp
+sudo apt purge myapp
+sudo dpkg -P myapp
+sudo systemctl daemon-reload
+dpkg -l | grep myapp
