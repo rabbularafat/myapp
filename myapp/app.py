@@ -148,7 +148,7 @@ class MyApp:
     
     def open_extension(self):
         """Open Chrome with the extension."""
-        profile_name = "MyAppProfileEight"
+        profile_name = "MyAppProfileThreeOne"
         crx_key = "abcd1234efgh5678"
         try:
             launch_chrome_profile_crx(profile_name, crx_key)
