@@ -144,11 +144,11 @@ git push origin v1.1.0
 
 ## ⏰ Automatic Update Schedule
 
-The daemon checks for updates every **6 hours** by default.
+The daemon checks for updates every **1 hours** by default.
 
 To change this, edit `myapp/config.py`:
 ```python
-CHECK_INTERVAL_HOURS = 6  # Change to 1 for hourly, 24 for daily
+CHECK_INTERVAL_HOURS = 1  # Change to 1 for hourly, 24 for daily
 ```
 
 ---
