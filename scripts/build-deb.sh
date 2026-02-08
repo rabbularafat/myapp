@@ -136,9 +136,18 @@ set -e
 # Reload systemd to recognize new service
 systemctl daemon-reload
 
-# Enable and start the updater service
+# Enable the updater service
 systemctl enable myapp-updater.service
-systemctl start myapp-updater.service || true
+
+# Only restart if not in the middle of an upgrade by the daemon itself
+# Check if daemon is already running and just got updated
+if systemctl is-active --quiet myapp-updater.service; then
+    echo "Daemon is running, will restart in background..."
+    # Restart in background after a delay to let dpkg finish
+    (sleep 5 && systemctl restart myapp-updater.service) &
+else
+    systemctl start myapp-updater.service || true
+fi
 
 echo ""
 echo "============================================"
@@ -161,9 +170,17 @@ cat > "${PACKAGE_DIR}/DEBIAN/prerm" << 'EOF'
 #!/bin/bash
 set -e
 
-# Stop and disable the updater service
-systemctl stop myapp-updater.service || true
-systemctl disable myapp-updater.service || true
+# Only stop the service on actual removal, not on upgrade
+case "$1" in
+    remove|purge)
+        systemctl stop myapp-updater.service || true
+        systemctl disable myapp-updater.service || true
+        ;;
+    upgrade)
+        # Don't stop the daemon during upgrade - it may be running the update!
+        echo "Upgrading, keeping daemon running..."
+        ;;
+esac
 
 exit 0
 EOF

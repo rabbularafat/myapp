@@ -235,41 +235,71 @@ class UpdateDaemon:
         xauthority = None
         
         try:
-            # Method 1: Check who is logged in
-            result = subprocess.run(["who"], capture_output=True, text=True)
+            # Method 1: Use loginctl to find sessions (most reliable)
+            result = subprocess.run(
+                ["loginctl", "list-sessions", "--no-legend"],
+                capture_output=True,
+                text=True
+            )
             for line in result.stdout.strip().split('\n'):
-                if ':0' in line or 'tty' in line:
-                    real_user = line.split()[0]
-                    break
+                parts = line.split()
+                if len(parts) >= 3:
+                    session_id = parts[0]
+                    # Check if this session has a display
+                    session_info = subprocess.run(
+                        ["loginctl", "show-session", session_id, "-p", "Type", "-p", "User"],
+                        capture_output=True,
+                        text=True
+                    )
+                    if 'Type=x11' in session_info.stdout or 'Type=wayland' in session_info.stdout:
+                        for info_line in session_info.stdout.split('\n'):
+                            if info_line.startswith('User='):
+                                real_user = info_line.split('=')[1].strip()
+                                break
+                    if real_user:
+                        break
             
-            # Method 2: Check DISPLAY owner if who didn't work
+            # Method 2: Check /run/user directories
+            if not real_user:
+                for user_dir in glob.glob('/run/user/*'):
+                    try:
+                        uid = int(os.path.basename(user_dir))
+                        if uid >= 1000:  # Regular users start at 1000
+                            user_info = pwd.getpwuid(uid)
+                            real_user = user_info.pw_name
+                            real_uid = uid
+                            break
+                    except:
+                        continue
+            
+            # Method 3: Find owner of the X display
             if not real_user:
                 result = subprocess.run(
-                    ["ps", "aux"],
+                    ["stat", "-c", "%U", "/tmp/.X11-unix/X0"],
                     capture_output=True,
                     text=True
                 )
-                for line in result.stdout.split('\n'):
-                    if 'Xorg' in line or 'gnome-session' in line or 'plasma' in line:
-                        real_user = line.split()[0]
-                        break
+                if result.returncode == 0:
+                    real_user = result.stdout.strip()
             
             if real_user and real_user != 'root':
                 try:
-                    real_uid = pwd.getpwnam(real_user).pw_uid
+                    user_info = pwd.getpwnam(real_user)
+                    real_uid = user_info.pw_uid
                     # Find Xauthority file
                     xauth_paths = [
                         f"/home/{real_user}/.Xauthority",
                         f"/run/user/{real_uid}/gdm/Xauthority",
-                        f"/tmp/.X0-lock"
+                        f"/run/user/{real_uid}/.mutter-Xwaylandauth.*"
                     ]
                     for path in xauth_paths:
-                        if os.path.exists(path):
-                            xauthority = path
+                        matches = glob.glob(path)
+                        if matches and os.path.exists(matches[0]):
+                            xauthority = matches[0]
                             break
                     logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
                 except Exception as e:
-                    logger.warning(f"Could not get user info: {e}")
+                    logger.warning(f"Could not get user info for '{real_user}': {e}")
         except Exception as e:
             logger.warning(f"Could not find desktop user: {e}")
         
