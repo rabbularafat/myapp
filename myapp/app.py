@@ -7,6 +7,8 @@ import os
 import platform
 import logging
 import threading
+import shutil
+import subprocess
 
 from myapp import __version__, __app_name__
 

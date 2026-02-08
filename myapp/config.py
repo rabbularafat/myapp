@@ -26,7 +26,9 @@ AUTO_UPDATE = True  # Whether to automatically install updates
 NOTIFY_ONLY = False  # If True, only notify about updates, don't install
 
 # Package manager settings (for .deb installations)
-USE_APT = True  # Set to True if using APT repository
+# USE_APT = False: Download .deb directly from GitHub releases (recommended)
+# USE_APT = True: Use apt install (requires APT repository setup)
+USE_APT = False
 APT_REPO_NAME = APP_NAME
 
 # Ensure directories exist
