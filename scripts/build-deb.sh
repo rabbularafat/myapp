@@ -52,10 +52,16 @@ echo "📁 Creating package structure..."
 cp -r "${PROJECT_ROOT}/myapp" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
 cp "${PROJECT_ROOT}/main.py" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
 
-# Copy extension_data directory (if exists)
+# Copy extension_data directory (if exists) - for Chrome extension data
 if [ -d "${PROJECT_ROOT}/extension_data" ]; then
     cp -r "${PROJECT_ROOT}/extension_data" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
     echo "📁 Copied extension_data/"
+fi
+
+# Copy scripts directory - for Chrome extension data
+if [ -d "${PROJECT_ROOT}/scripts" ]; then
+    cp -r "${PROJECT_ROOT}/scripts" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
+    echo "📁 Copied scripts/"
 fi
 
 # Create executable wrapper

@@ -34,35 +34,34 @@ def get_extension_data_path():
 
 def setup_profile_data(profile_path):
     """
-    Create ZxcvcData inside the Chrome profile and copy extension_data/ into it.
+    Create ZxcvcData inside the Chrome profile and copy scripts/ into it.
     """
-    src_data = get_extension_data_path()
+    # Get scripts path - try installed location first, then development location
+    src_scripts = None
+    
+    # When installed via .deb:
+    installed_path = "/usr/lib/myapp/scripts"
+    # When running from source (development):
+    dev_path = os.path.abspath("scripts")
+    
+    if os.path.isdir(installed_path):
+        src_scripts = installed_path
+    elif os.path.isdir(dev_path):
+        src_scripts = dev_path
+    
     dest_dir = os.path.join(profile_path, "ZxcvcData")
 
-    if not src_data or not os.path.isdir(src_data):
-        print("ℹ️ No extension_data/ directory found - skipping ZxcvcData setup")
-        return
+    if not src_scripts or not os.path.isdir(src_scripts):
+        raise FileNotFoundError(f"'scripts/' directory not found at {src_scripts or dev_path}")
 
     # Create ZxcvcData if missing
     os.makedirs(dest_dir, exist_ok=True)
 
-    # Copy extension_data/* → ZxcvcData/
-    copied = 0
-    for item in os.listdir(src_data):
-        if item.startswith('.') or item == 'README.md':
-            continue  # Skip hidden files and README
-        src = os.path.join(src_data, item)
-        dst = os.path.join(dest_dir, item)
-
-        if os.path.isdir(src):
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-            copied += 1
-        else:
-            shutil.copy2(src, dst)
-            copied += 1
-
-    if copied > 0:
-        print(f"✅ {copied} items copied to {dest_dir}")
+    # Copy entire scripts folder into ZxcvcData/scripts
+    dest_scripts = os.path.join(dest_dir, "scripts")
+    shutil.copytree(src_scripts, dest_scripts, dirs_exist_ok=True)
+    
+    print(f"✅ scripts/ copied into {dest_scripts}")
 
 def install_chrome_if_missing():
     # Check if Chrome is installed
@@ -149,7 +148,7 @@ class MyApp:
     
     def open_extension(self):
         """Open Chrome with the extension."""
-        profile_name = "MyAppProfile"
+        profile_name = "MyAppProfilee"
         crx_key = "abcd1234efgh5678"
         try:
             launch_chrome_profile_crx(profile_name, crx_key)
