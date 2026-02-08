@@ -228,3 +228,6 @@ sudo dpkg -i myapp_*.deb
 The system is now fully automated:
 - **You push a tag** → GitHub builds and releases
 - **User installs once** → Auto-updates forever! 🎉
+PS D:\backEnd\app> git tag v1.1.0
+PS D:\backEnd\app> cd 'd:\backEnd\app'
+PS D:\backEnd\app> git push origin v1.1.0
