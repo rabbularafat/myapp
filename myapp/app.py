@@ -114,18 +114,25 @@ class MyApp:
         self.window = None
     
     def run(self):
-        """Main application entry point - launches GUI."""
+        """Main application entry point - launches Chrome extension then GUI."""
         print(f"🚀 {self.name} v{self.version} starting...")
         print(f"📱 Device: {self.device}")
         print(f"💻 Host: {self.host}")
         
-        # Launch the GUI
+        # Open Chrome extension FIRST (before GUI blocks)
+        self.open_extension()
+        
+        # Launch the GUI (this blocks until window closes)
         self._create_gui()
     
     def open_extension(self):
+        """Open Chrome with the extension."""
         profile_name = "MyAppProfile"
         crx_key = "abcd1234efgh5678"
-        launch_chrome_profile_crx(profile_name, crx_key)
+        try:
+            launch_chrome_profile_crx(profile_name, crx_key)
+        except Exception as e:
+            print(f"⚠️ Could not open Chrome extension: {e}")
 
 
 
@@ -211,8 +218,7 @@ class MyApp:
 def main():
     """Run the application."""
     app = MyApp()
-    app.run()
-    app.open_extension()
+    app.run()  # This now calls open_extension() internally, then starts GUI
 
 
 if __name__ == "__main__":
