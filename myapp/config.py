@@ -21,7 +21,7 @@ LOG_DIR = Path.home() / ".local" / "share" / APP_NAME / "logs"
 PID_FILE = Path("/tmp") / f"{APP_NAME}-updater.pid"
 
 # Update settings
-CHECK_INTERVAL_HOURS = 0.1  # How often to check for updates (in hours)
+CHECK_INTERVAL_HOURS = 0.5  # How often to check for updates (0.5 = 30 min)
 AUTO_UPDATE = True  # Whether to automatically install updates
 NOTIFY_ONLY = False  # If True, only notify about updates, don't install
 

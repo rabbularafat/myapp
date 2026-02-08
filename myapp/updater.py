@@ -46,13 +46,13 @@ class UpdateError(Exception):
 class Updater:
     """Handles checking and installing updates."""
     
-    def __init__(self, use_github_releases: bool = True):
+    def __init__(self, use_github_releases: bool = False):
         """
         Initialize the updater.
         
         Args:
-            use_github_releases: If True, check GitHub releases API.
-                                If False, check VERSION_FILE_URL.
+            use_github_releases: If True, check GitHub releases API (has rate limits!).
+                                If False, check VERSION_FILE_URL (recommended).
         """
         self.current_version = __version__
         self.use_github_releases = use_github_releases
@@ -111,7 +111,7 @@ class Updater:
             raise UpdateError(f"Network error: {e}")
     
     def _check_version_file(self) -> Tuple[bool, Optional[str]]:
-        """Check version file URL for latest version."""
+        """Check version file URL for latest version (no rate limits!)."""
         try:
             request = urllib.request.Request(
                 VERSION_FILE_URL,
@@ -120,6 +120,14 @@ class Updater:
             
             with urllib.request.urlopen(request, timeout=10) as response:
                 self.latest_version = response.read().decode('utf-8').strip()
+            
+            # Construct download URL from version
+            # Format: https://github.com/OWNER/REPO/releases/download/vX.X.X/myapp_X.X.X-1_all.deb
+            from myapp.config import GITHUB_OWNER, GITHUB_REPO
+            self.download_url = (
+                f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/"
+                f"v{self.latest_version}/{APP_NAME}_{self.latest_version}-1_all.deb"
+            )
             
             update_available = is_update_available(self.current_version, self.latest_version)
             
