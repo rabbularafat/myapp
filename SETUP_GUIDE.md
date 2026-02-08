@@ -228,8 +228,17 @@ sudo dpkg -i myapp_*.deb
 The system is now fully automated:
 - **You push a tag** → GitHub builds and releases
 - **User installs once** → Auto-updates forever! 🎉
-PS D:\backEnd\app> git tag v1.1.0
-PS D:\backEnd\app> git push origin v1.1.0
+
+git push 
+# 1. Make your changes
+# 2. Stage and commit
+git add .
+git commit -m "your message"
+# 3. ALWAYS push to main FIRST!
+git push origin main       # ← DON'T FORGET THIS!
+# 4. Then create and push tag
+git tag v1.2.2
+git push origin v1.2.2
 
 wget https://github.com/rabbularafat/myapp/releases/download/v1.2.0/myapp_1.2.0-1_all.deb
 sudo dpkg -i myapp_1.2.0-1_all.deb
