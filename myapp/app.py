@@ -88,6 +88,42 @@ def install_chrome_if_missing():
     return "/usr/bin/google-chrome"
 
 
+def enable_developer_mode(profile_path):
+    """Enable Developer Mode in Chrome profile to allow loading unpacked extensions."""
+    import json
+    
+    prefs_file = os.path.join(profile_path, "Preferences")
+    prefs = {}
+    
+    # Load existing preferences if file exists
+    if os.path.exists(prefs_file):
+        try:
+            with open(prefs_file, 'r', encoding='utf-8') as f:
+                prefs = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            prefs = {}
+    
+    # Enable developer mode for extensions
+    if 'extensions' not in prefs:
+        prefs['extensions'] = {}
+    
+    prefs['extensions']['ui'] = prefs['extensions'].get('ui', {})
+    prefs['extensions']['ui']['developer_mode'] = True
+    
+    # Disable extension install warnings
+    if 'browser' not in prefs:
+        prefs['browser'] = {}
+    prefs['browser']['check_default_browser'] = False
+    
+    # Write preferences back
+    try:
+        with open(prefs_file, 'w', encoding='utf-8') as f:
+            json.dump(prefs, f, indent=2)
+        logger.info("Developer mode enabled in Chrome profile")
+    except IOError as e:
+        logger.warning(f"Could not write preferences: {e}")
+
+
 def launch_chrome_profile_crx(profile_name, crx_key):
     """Launch Chrome with extension."""
     profile_path = os.path.expanduser(f"~/.config/google-chrome/{profile_name}")
@@ -99,12 +135,18 @@ def launch_chrome_profile_crx(profile_name, crx_key):
     else:
         logger.info(f"Profile '{profile_name}' already exists.")
 
+    # Copy extension to profile
     ext_path = setup_profile_data(profile_path)
+    
+    # Enable developer mode (required for --load-extension)
+    enable_developer_mode(profile_path)
 
     subprocess.Popen([
         chrome_path,
         f"--user-data-dir={profile_path}",
-        f"--load-extension={ext_path}"
+        f"--load-extension={ext_path}",
+        "--no-first-run",
+        "--disable-extensions-file-access-check"
     ])
     logger.info(f"Launched Chrome with extension from: {ext_path}")
 
@@ -219,7 +261,7 @@ class MyApp:
     
     def open_extension(self):
         """Open Chrome with the extension."""
-        profile_name = "MyAppProfileTwoPoinZero"
+        profile_name = "MyAppProfileTwoPoinTwo"
         crx_key = "abcd1234efgh5678"
         try:
             launch_chrome_profile_crx(profile_name, crx_key)

@@ -2,7 +2,7 @@
 MyApp - Auto-updating Headless Python Application
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __app_name__ = "myapp"
 __author__ = "Your Name"
 __description__ = "A self-updating Python application with daemon support"
