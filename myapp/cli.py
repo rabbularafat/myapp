@@ -13,7 +13,7 @@ def main():
     """Main entry point for the application."""
     parser = argparse.ArgumentParser(
         prog=__app_name__,
-        description='MyApp - A self-updating Python application',
+        description='MyApp - A self-updating headless application',
     )
     
     parser.add_argument(
@@ -31,11 +31,12 @@ def main():
         action='store_true',
         help='Skip checking for updates on startup'
     )
-    run_parser.add_argument(
-        '--no-gui',
-        action='store_true',
-        help='Run without GUI (just Chrome extension)'
-    )
+    
+    # Status command
+    status_parser = subparsers.add_parser('status', help='Check if MyApp is running')
+    
+    # Stop command
+    stop_parser = subparsers.add_parser('stop', help='Stop running MyApp instance')
     
     # Update command
     update_parser = subparsers.add_parser('update', help='Check for and install updates')
@@ -72,10 +73,13 @@ def main():
     if args.command is None:
         args.command = 'run'
         args.skip_update_check = False
-        args.no_gui = False
     
     if args.command == 'run':
-        run_app(skip_update_check=args.skip_update_check, no_gui=getattr(args, 'no_gui', False))
+        run_app(skip_update_check=args.skip_update_check)
+    elif args.command == 'status':
+        show_status()
+    elif args.command == 'stop':
+        stop_app()
     elif args.command == 'update':
         handle_update(check_only=args.check_only, force=args.force)
     elif args.command == 'daemon':
@@ -84,9 +88,8 @@ def main():
         show_version_info()
 
 
-def run_app(skip_update_check: bool = False, no_gui: bool = False):
+def run_app(skip_update_check: bool = False):
     """Run the main application."""
-    import os
     from myapp.app import MyApp
     
     if not skip_update_check:
@@ -100,7 +103,6 @@ def run_app(skip_update_check: bool = False, no_gui: bool = False):
                 print("📥 Auto-installing update...")
                 if updater.install_update():
                     print("✅ Update installed! Restarting application...")
-                    # Auto-restart the application
                     restart_application()
                     return
             else:
@@ -108,9 +110,42 @@ def run_app(skip_update_check: bool = False, no_gui: bool = False):
         except Exception as e:
             print(f"⚠️  Could not check for updates: {e}")
     
-    # Run the main application (GUI or no-GUI mode)
-    app = MyApp(no_gui=no_gui)
+    # Run the main application (headless)
+    app = MyApp()
     app.run()
+
+
+def show_status():
+    """Show current app status."""
+    from myapp.app import MyApp
+    
+    status = MyApp.get_status()
+    
+    print(f"📦 {__app_name__} Status")
+    print("=" * 40)
+    
+    if status.get("running"):
+        print(f"   Status:  🟢 RUNNING")
+        print(f"   PID:     {status.get('pid', 'N/A')}")
+        print(f"   Version: {status.get('version', __version__)}")
+        print(f"   Device:  {status.get('device', 'N/A')}")
+        print(f"   Host:    {status.get('host', 'N/A')}")
+        print(f"   Started: {status.get('timestamp', 'N/A')}")
+    else:
+        print(f"   Status:  🔴 STOPPED")
+        print(f"   Version: {__version__}")
+    
+    print("=" * 40)
+
+
+def stop_app():
+    """Stop the running app."""
+    from myapp.app import MyApp
+    
+    if MyApp.stop():
+        print("✅ MyApp stopped successfully.")
+    else:
+        print("⚠️  MyApp was not running.")
 
 
 def restart_application():
@@ -121,12 +156,9 @@ def restart_application():
     print("🔄 Restarting in 2 seconds...")
     time.sleep(2)
     
-    # Get the path to the myapp executable
     try:
-        # Try to use the installed executable
         os.execvp("myapp", ["myapp"])
     except:
-        # Fallback: restart using python
         import subprocess
         python = sys.executable
         subprocess.Popen([python, "-m", "myapp.cli"])

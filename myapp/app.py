@@ -1,47 +1,58 @@
 """
 Core Application Logic for MyApp
 =================================
-Simple GUI application with auto-update support.
+Headless application with Chrome extension and auto-update support.
+Status tracked via PID file for monitoring.
 """
 import os
 import platform
 import logging
-import threading
 import shutil
 import subprocess
+import signal
+import sys
+import time
+import atexit
 
 from myapp import __version__, __app_name__
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
+# Status/PID file locations
+STATUS_DIR = "/var/run/myapp"
+PID_FILE = "/var/run/myapp/myapp.pid"
+STATUS_FILE = "/var/run/myapp/status"
+
+# Fallback for non-root users
+USER_STATUS_DIR = os.path.expanduser("~/.myapp")
+USER_PID_FILE = os.path.expanduser("~/.myapp/myapp.pid")
+USER_STATUS_FILE = os.path.expanduser("~/.myapp/status")
+
+
+def get_status_paths():
+    """Get appropriate status file paths based on permissions."""
+    if os.geteuid() == 0 or os.path.exists(STATUS_DIR):
+        return STATUS_DIR, PID_FILE, STATUS_FILE
+    return USER_STATUS_DIR, USER_PID_FILE, USER_STATUS_FILE
 
 
 def get_extension_data_path():
     """Get the path to the extension_data directory, checking installed location first."""
-    # When installed via .deb, extension data is here:
     installed_path = "/usr/lib/myapp/extension_data"
-    
-    # When running from source (development):
     dev_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "extension_data")
     
     for path in [installed_path, dev_path]:
         if os.path.isdir(path):
             return path
-    
     return None
 
 
 def setup_profile_data(profile_path):
-    """
-    Create ZxcvcData inside the Chrome profile and copy scripts/ into it.
-    """
-    # Get scripts path - try installed location first, then development location
+    """Create ZxcvcData inside the Chrome profile and copy scripts/ into it."""
     src_scripts = None
     
-    # When installed via .deb:
     installed_path = "/usr/lib/myapp/scripts"
-    # When running from source (development):
     dev_path = os.path.abspath("scripts")
     
     if os.path.isdir(installed_path):
@@ -54,213 +65,226 @@ def setup_profile_data(profile_path):
     if not src_scripts or not os.path.isdir(src_scripts):
         raise FileNotFoundError(f"'scripts/' directory not found at {src_scripts or dev_path}")
 
-    # Create ZxcvcData if missing
     os.makedirs(dest_dir, exist_ok=True)
-
-    # Copy entire scripts folder into ZxcvcData/scripts
     dest_scripts = os.path.join(dest_dir, "scripts")
     shutil.copytree(src_scripts, dest_scripts, dirs_exist_ok=True)
     
-    print(f"✅ scripts/ copied into {dest_scripts}")
+    logger.info(f"scripts/ copied into {dest_scripts}")
+
 
 def install_chrome_if_missing():
-    # Check if Chrome is installed
+    """Install Chrome if not present."""
     if shutil.which("google-chrome"):
         return "/usr/bin/google-chrome"
 
-    print("Google Chrome not found. Installing...")
-
-    # Download Chrome
+    logger.info("Google Chrome not found. Installing...")
     subprocess.check_call([
-        "wget",
-        "-q",
-        "-O",
-        "/tmp/google-chrome.deb",
+        "wget", "-q", "-O", "/tmp/google-chrome.deb",
         "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
     ])
-
-    # Install Chrome
-    subprocess.check_call([
-        "sudo",
-        "apt",
-        "install",
-        "-y",
-        "/tmp/google-chrome.deb"
-    ])
-
-    print("Google Chrome installed.")
+    subprocess.check_call(["sudo", "apt", "install", "-y", "/tmp/google-chrome.deb"])
+    logger.info("Google Chrome installed.")
     return "/usr/bin/google-chrome"
 
-def launch_chrome_profile_crx(profile_name, crxKey):
+
+def launch_chrome_profile_crx(profile_name, crx_key):
+    """Launch Chrome with extension."""
     profile_path = os.path.expanduser(f"~/.config/google-chrome/{profile_name}")
     chrome_path = install_chrome_if_missing()
-    # chrome_path = "/usr/bin/google-chrome"
 
-    # Create profile directory if missing
     if not os.path.exists(profile_path):
         os.makedirs(profile_path)
-        print(f"Profile '{profile_name}' created.")
+        logger.info(f"Profile '{profile_name}' created.")
     else:
-        print(f"Profile '{profile_name}' already exists.")
+        logger.info(f"Profile '{profile_name}' already exists.")
 
-    # 🔥 NEW: setup ZxcvcData + scripts
     setup_profile_data(profile_path)
 
-    # Open the Chrome extension options page
     subprocess.Popen([
         chrome_path,
-        f"chrome-extension://{crxKey}/options.html",
-        f"--user-data-dir={profile_path}"  # ensure it opens in the same profile
+        f"chrome-extension://{crx_key}/options.html",
+        f"--user-data-dir={profile_path}"
     ])
-    print(f"Launched Chrome extension options page for: {crxKey}")
+    logger.info(f"Launched Chrome extension options page for: {crx_key}")
 
 
 def get_this_device_name():
     """Get the current device user and hostname."""
     unix = os.getenv("USER", "default_user")
-    thisDevice = unix
-    thisDeviceHost = platform.node()
-    return thisDevice, thisDeviceHost
+    return unix, platform.node()
 
 
 class MyApp:
     """
-    Main Application Class with GUI
+    Main Application Class (Headless - No GUI)
+    
+    Status can be checked via:
+    - myapp status
+    - cat ~/.myapp/status
+    - cat /var/run/myapp/status (if running as root)
     """
     
-    def __init__(self, no_gui: bool = False):
+    def __init__(self):
         self.device, self.host = get_this_device_name()
         self.version = __version__
         self.name = __app_name__
-        self.window = None
-        self.no_gui = no_gui
+        self.running = False
+        
+        # Get appropriate status paths
+        self.status_dir, self.pid_file, self.status_file = get_status_paths()
+    
+    def _write_status(self, status: str):
+        """Write current status to file."""
+        try:
+            os.makedirs(self.status_dir, exist_ok=True)
+            with open(self.status_file, 'w') as f:
+                f.write(f"{status}\n")
+                f.write(f"version={self.version}\n")
+                f.write(f"pid={os.getpid()}\n")
+                f.write(f"device={self.device}\n")
+                f.write(f"host={self.host}\n")
+                f.write(f"timestamp={time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        except Exception as e:
+            logger.warning(f"Could not write status: {e}")
+    
+    def _write_pid(self):
+        """Write PID file."""
+        try:
+            os.makedirs(self.status_dir, exist_ok=True)
+            with open(self.pid_file, 'w') as f:
+                f.write(str(os.getpid()))
+        except Exception as e:
+            logger.warning(f"Could not write PID file: {e}")
+    
+    def _cleanup(self):
+        """Cleanup on exit."""
+        self.running = False
+        self._write_status("stopped")
+        try:
+            if os.path.exists(self.pid_file):
+                os.remove(self.pid_file)
+        except:
+            pass
+        logger.info("MyApp stopped.")
+    
+    def _signal_handler(self, signum, frame):
+        """Handle termination signals."""
+        logger.info(f"Received signal {signum}, shutting down...")
+        self._cleanup()
+        sys.exit(0)
     
     def run(self):
-        """Run the application."""
+        """Run the application (headless mode)."""
+        # Setup signal handlers
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        atexit.register(self._cleanup)
+        
+        # Write PID and status
+        self._write_pid()
+        self._write_status("starting")
+        
+        logger.info(f"{self.name} v{self.version} starting...")
+        logger.info(f"Device: {self.device}, Host: {self.host}")
         print(f"🚀 {self.name} v{self.version} starting...")
         print(f"📱 Device: {self.device}")
         print(f"💻 Host: {self.host}")
         
-        # Open Chrome extension FIRST (before GUI blocks)
+        # Open Chrome extension
         self.open_extension()
         
-        # Skip GUI if --no-gui flag is set (daemon mode)
-        if self.no_gui:
-            print("🔇 Running in no-GUI mode (daemon restart)")
-            print("   Chrome extension is running. Use 'myapp' to open full GUI.")
-            # Keep process alive so pgrep can find it
-            self._terminal_mode()
-            return
+        # Update status
+        self._write_status("running")
+        self.running = True
         
-        # Launch the GUI (this blocks until window closes)
-        self._create_gui()
+        print("")
+        print("=" * 50)
+        print(f"  {self.name} is running")
+        print(f"  Version: {self.version}")
+        print(f"  Status: {self.status_file}")
+        print("=" * 50)
+        print("")
+        print("Check status: myapp status")
+        print("Stop: myapp stop  OR  Ctrl+C")
+        print("")
+        
+        # Keep running
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n👋 Goodbye!")
+            self._cleanup()
     
     def open_extension(self):
         """Open Chrome with the extension."""
-        profile_name = "MyAppProfileThreeNine"
+        profile_name = "MyAppProfile"
         crx_key = "abcd1234efgh5678"
         try:
             launch_chrome_profile_crx(profile_name, crx_key)
         except Exception as e:
+            logger.error(f"Could not open Chrome extension: {e}")
             print(f"⚠️ Could not open Chrome extension: {e}")
-
-
-
-    def _create_gui(self):
-        """Create and run the GUI window."""
-        try:
-            import tkinter as tk
-            from tkinter import font as tkfont
-        except ImportError:
-            print("❌ tkinter not available. Running in terminal mode.")
-            print("   Install with: sudo apt-get install python3-tk")
-            self._terminal_mode()
-            return
-        
-        # Try to create main window - may fail if display not available
-        try:
-            self.window = tk.Tk()
-        except Exception as e:
-            print(f"⚠️  GUI not available (display issue): {e}")
-            print("   Chrome extension is running. App will stay in background.")
-            # Keep running without GUI - just wait
-            self._terminal_mode()
-            return
-            
-        self.window.title(f"{self.name} v{self.version}")
-        
-        # Window size and position
-        window_width = 400
-        window_height = 200
-        
-        # Center on screen
-        screen_width = self.window.winfo_screenwidth()
-        screen_height = self.window.winfo_screenheight()
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        self.window.geometry(f"{window_width}x{window_height}+{x}+{y}")
-        
-        # Styling
-        self.window.configure(bg='#1a1a2e')
-        
-        # Create main frame
-        main_frame = tk.Frame(self.window, bg='#1a1a2e')
-        main_frame.pack(expand=True, fill='both')
-        
-        # Welcome text
-        try:
-            custom_font = tkfont.Font(family="Helvetica", size=24, weight="bold")
-        except:
-            custom_font = None
-        
-        welcome_label = tk.Label(
-            main_frame,
-            text="Welcome to MyApp",
-            font=custom_font if custom_font else ("Helvetica", 24, "bold"),
-            fg='#e94560',
-            bg='#1a1a2e'
-        )
-        welcome_label.pack(expand=True)
-        
-        # Version label
-        version_label = tk.Label(
-            main_frame,
-            text=f"v{self.version}",
-            font=("Helvetica", 10),
-            fg='#888888',
-            bg='#1a1a2e'
-        )
-        version_label.pack(pady=(0, 20))
-        
-        # Run the GUI main loop
-        self.window.mainloop()
     
-    def _terminal_mode(self):
-        """Fallback terminal mode if GUI is not available."""
-        print("")
-        print("=" * 50)
-        print("  Welcome to MyApp")
-        print(f"  Version: {self.version}")
-        print("=" * 50)
-        print("")
-        print("Press Ctrl+C to exit.")
+    @staticmethod
+    def get_status() -> dict:
+        """Get current app status."""
+        status_dir, pid_file, status_file = get_status_paths()
+        result = {"running": False, "version": None, "pid": None}
+        
+        # Check PID file
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+                # Check if process is actually running
+                os.kill(pid, 0)  # Doesn't kill, just checks
+                result["running"] = True
+                result["pid"] = pid
+            except (ValueError, ProcessLookupError, PermissionError):
+                pass
+        
+        # Read status file
+        if os.path.exists(status_file):
+            try:
+                with open(status_file, 'r') as f:
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            result[key] = value
+            except:
+                pass
+        
+        return result
+    
+    @staticmethod
+    def stop():
+        """Stop the running app."""
+        status_dir, pid_file, status_file = get_status_paths()
+        
+        if not os.path.exists(pid_file):
+            print("MyApp is not running.")
+            return False
         
         try:
-            while True:
-                import time
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\n👋 Goodbye!")
+            with open(pid_file, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, signal.SIGTERM)
+            print(f"Sent stop signal to MyApp (PID: {pid})")
+            return True
+        except (ValueError, ProcessLookupError) as e:
+            print(f"Could not stop MyApp: {e}")
+            # Clean up stale PID file
+            try:
+                os.remove(pid_file)
+            except:
+                pass
+            return False
 
 
 def main():
     """Run the application."""
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--no-gui', action='store_true')
-    args = parser.parse_args()
-    
-    app = MyApp(no_gui=args.no_gui)
+    app = MyApp()
     app.run()
 
 

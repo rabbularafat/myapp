@@ -1,8 +1,8 @@
 """
-MyApp - Auto-updating Python Application
+MyApp - Auto-updating Headless Python Application
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __app_name__ = "myapp"
 __author__ = "Your Name"
 __description__ = "A self-updating Python application with daemon support"

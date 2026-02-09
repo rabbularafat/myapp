@@ -221,18 +221,16 @@ class UpdateDaemon:
         logger.info("Daemon stopped.")
     
     def _restart_myapp(self):
-        """Restart the myapp GUI after an update."""
+        """Restart the myapp after an update (headless mode)."""
         import subprocess
         import pwd
         import glob
         
         logger.info("Restarting myapp...")
         
-        # Find the actual user (not root) who is running the desktop
+        # Find the actual user (not root)
         real_user = None
         real_uid = None
-        display = ":0"
-        xauthority = None
         
         try:
             # Method 1: Use loginctl to find sessions (most reliable)
@@ -300,40 +298,14 @@ class UpdateDaemon:
                 except Exception as e:
                     logger.warning(f"Could not get uid for '{real_user}': {e}")
             
-            # Find Xauthority if we have user info
             if real_user and real_uid:
-                xauth_paths = [
-                    f"/home/{real_user}/.Xauthority",
-                    f"/run/user/{real_uid}/gdm/Xauthority",
-                ]
-                # Also check for wayland auth files
-                for pattern in [f"/run/user/{real_uid}/.mutter-Xwaylandauth.*"]:
-                    xauth_paths.extend(glob.glob(pattern))
-                
-                for path in xauth_paths:
-                    if os.path.exists(path):
-                        xauthority = path
-                        break
-                logger.info(f"Found desktop user: {real_user} (uid={real_uid})")
+                logger.info(f"Found user: {real_user} (uid={real_uid})")
                 
         except Exception as e:
-            logger.warning(f"Could not find desktop user: {e}")
+            logger.warning(f"Could not find user: {e}")
         
-        # Send desktop notification
-        try:
-            notify_env = os.environ.copy()
-            notify_env['DISPLAY'] = display
-            if real_uid:
-                notify_env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{real_uid}/bus"
-            
-            subprocess.run([
-                "notify-send", 
-                "MyApp Updated!", 
-                "A new version has been installed. Restarting...",
-                "-i", "system-software-update"
-            ], capture_output=True, timeout=5, env=notify_env)
-        except Exception:
-            pass
+        # Log the update (no desktop notifications in headless mode)
+        logger.info("MyApp updated! Restarting...")
         
         # Kill any running myapp processes (except this daemon)
         try:
@@ -361,26 +333,14 @@ class UpdateDaemon:
         
         # Start new myapp instance
         if real_user and real_uid:
-            # Build the command that will be run as the user
-            # We need to export the display environment INSIDE the user's shell
-            xauth_export = f"XAUTHORITY={xauthority}" if xauthority else "XAUTHORITY=/home/{real_user}/.Xauthority"
-            dbus_export = f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{real_uid}/bus"
-            
             # Log file for debugging
             log_file = "/tmp/myapp-restart.log"
             
-            # Allow local X connections (needed for tkinter)
-            try:
-                subprocess.run(["xhost", "+local:"], capture_output=True, timeout=5,
-                              env={'DISPLAY': display})
-            except:
-                pass
-            
-            # The actual command to run - export all needed env vars in bash
-            # Use nohup and & to run in background
-            inner_cmd = f"export DISPLAY={display}; export {dbus_export}; export HOME=/home/{real_user}; export USER={real_user}; export {xauth_export}; "
-            # Use 'run --no-gui' to skip tkinter GUI but still open Chrome extension
-            inner_cmd += f"nohup /usr/bin/myapp run --no-gui >> {log_file} 2>&1 &"
+            # Simpler command for headless app - just need HOME and USER
+            dbus_export = f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{real_uid}/bus"
+            inner_cmd = f"export HOME=/home/{real_user}; export USER={real_user}; export {dbus_export}; "
+            # Run myapp (headless mode now)
+            inner_cmd += f"nohup /usr/bin/myapp run >> {log_file} 2>&1 &"
             
             logger.info(f"Restart command: {inner_cmd}")
             

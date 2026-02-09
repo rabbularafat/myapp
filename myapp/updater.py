@@ -266,16 +266,8 @@ class Updater:
             return False
     
     def _send_notification(self, title: str, message: str):
-        """Send desktop notification (Linux)."""
-        try:
-            subprocess.run(
-                ["notify-send", title, message, "-i", "system-software-update"],
-                capture_output=True,
-                timeout=5
-            )
-        except Exception:
-            # Notification is optional, don't fail if it doesn't work
-            pass
+        """Log notification (no desktop notifications in headless mode)."""
+        logger.info(f"[NOTIFICATION] {title}: {message}")
 
 
 def check_and_update(auto_install: bool = AUTO_UPDATE) -> bool:
