@@ -125,30 +125,64 @@ def enable_developer_mode(profile_path):
 
 
 def launch_chrome_profile_crx(profile_name, crx_key):
-    """Launch Chrome with extension."""
-    profile_path = os.path.expanduser(f"~/.config/google-chrome/{profile_name}")
+    """Launch Chrome with extension using a dedicated user-data-dir."""
+    # Use a dedicated directory for myapp Chrome data
+    chrome_data_dir = os.path.expanduser(f"~/.config/myapp-chrome")
     chrome_path = install_chrome_if_missing()
 
-    if not os.path.exists(profile_path):
-        os.makedirs(profile_path)
-        logger.info(f"Profile '{profile_name}' created.")
+    # Create the chrome data directory if it doesn't exist
+    if not os.path.exists(chrome_data_dir):
+        os.makedirs(chrome_data_dir)
+        logger.info(f"Chrome data directory created: {chrome_data_dir}")
     else:
-        logger.info(f"Profile '{profile_name}' already exists.")
+        logger.info(f"Chrome data directory exists: {chrome_data_dir}")
 
-    # Copy extension to profile
-    ext_path = setup_profile_data(profile_path)
+    # Get extension source path
+    ext_path = get_extension_source_path()
+    if not ext_path:
+        raise FileNotFoundError("Extension directory 'hemjjmkicbemgpifgbohhdhgjgebmkak' not found")
     
-    # Enable developer mode (required for --load-extension)
-    enable_developer_mode(profile_path)
+    logger.info(f"Using extension from: {ext_path}")
+    
+    # Enable developer mode in the Default profile
+    default_profile = os.path.join(chrome_data_dir, "Default")
+    os.makedirs(default_profile, exist_ok=True)
+    enable_developer_mode(default_profile)
 
-    subprocess.Popen([
+    # Launch Chrome with the extension
+    cmd = [
         chrome_path,
-        f"--user-data-dir={profile_path}",
+        f"--user-data-dir={chrome_data_dir}",
         f"--load-extension={ext_path}",
         "--no-first-run",
-        "--disable-extensions-file-access-check"
-    ])
+        "--no-default-browser-check",
+        "--disable-extensions-except=" + ext_path,
+        "https://www.google.com"
+    ]
+    
+    logger.info(f"Launching Chrome: {' '.join(cmd)}")
+    subprocess.Popen(cmd)
     logger.info(f"Launched Chrome with extension from: {ext_path}")
+
+
+def get_extension_source_path():
+    """Get the path to the extension directory."""
+    # Check installed location first
+    installed_path = "/usr/lib/myapp/hemjjmkicbemgpifgbohhdhgjgebmkak"
+    if os.path.isdir(installed_path):
+        return installed_path
+    
+    # Check development location (relative to script)
+    dev_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hemjjmkicbemgpifgbohhdhgjgebmkak")
+    if os.path.isdir(dev_path):
+        return dev_path
+    
+    # Check current working directory
+    cwd_path = os.path.abspath("hemjjmkicbemgpifgbohhdhgjgebmkak")
+    if os.path.isdir(cwd_path):
+        return cwd_path
+    
+    return None
 
 
 def get_this_device_name():
@@ -261,7 +295,7 @@ class MyApp:
     
     def open_extension(self):
         """Open Chrome with the extension."""
-        profile_name = "MyAppProfileTwoPoinTwo"
+        profile_name = "MyAppProfileFresh"
         crx_key = "abcd1234efgh5678"
         try:
             launch_chrome_profile_crx(profile_name, crx_key)
