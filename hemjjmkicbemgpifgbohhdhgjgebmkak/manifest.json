@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Google Redirect on Active",
+  "version": "1.0",
+  "description": "Redirects the active tab to Google whenever it becomes active.",
+  "permissions": ["tabs"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

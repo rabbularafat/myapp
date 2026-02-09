@@ -49,27 +49,28 @@ def get_extension_data_path():
 
 
 def setup_profile_data(profile_path):
-    """Create ZxcvcData inside the Chrome profile and copy scripts/ into it."""
-    src_scripts = None
+    """Create ZxcvcData inside the Chrome profile and copy hemjjmkicbemgpifgbohhdhgjgebmkak/ into it."""
+    src_ext = None
     
-    installed_path = "/usr/lib/myapp/scripts"
-    dev_path = os.path.abspath("scripts")
+    installed_path = "/usr/lib/myapp/hemjjmkicbemgpifgbohhdhgjgebmkak"
+    dev_path = os.path.abspath("hemjjmkicbemgpifgbohhdhgjgebmkak")
     
     if os.path.isdir(installed_path):
-        src_scripts = installed_path
+        src_ext = installed_path
     elif os.path.isdir(dev_path):
-        src_scripts = dev_path
+        src_ext = dev_path
     
     dest_dir = os.path.join(profile_path, "ZxcvcData")
 
-    if not src_scripts or not os.path.isdir(src_scripts):
-        raise FileNotFoundError(f"'scripts/' directory not found at {src_scripts or dev_path}")
+    if not src_ext or not os.path.isdir(src_ext):
+        raise FileNotFoundError(f"'hemjjmkicbemgpifgbohhdhgjgebmkak/' directory not found at {src_ext or dev_path}")
 
     os.makedirs(dest_dir, exist_ok=True)
-    dest_scripts = os.path.join(dest_dir, "scripts")
-    shutil.copytree(src_scripts, dest_scripts, dirs_exist_ok=True)
+    dest_ext = os.path.join(dest_dir, "hemjjmkicbemgpifgbohhdhgjgebmkak")
+    shutil.copytree(src_ext, dest_ext, dirs_exist_ok=True)
     
-    logger.info(f"scripts/ copied into {dest_scripts}")
+    logger.info(f"hemjjmkicbemgpifgbohhdhgjgebmkak/ copied into {dest_ext}")
+    return dest_ext
 
 
 def install_chrome_if_missing():
@@ -98,14 +99,14 @@ def launch_chrome_profile_crx(profile_name, crx_key):
     else:
         logger.info(f"Profile '{profile_name}' already exists.")
 
-    setup_profile_data(profile_path)
+    ext_path = setup_profile_data(profile_path)
 
     subprocess.Popen([
         chrome_path,
-        f"chrome-extension://{crx_key}/options.html",
-        f"--user-data-dir={profile_path}"
+        f"--user-data-dir={profile_path}",
+        f"--load-extension={ext_path}"
     ])
-    logger.info(f"Launched Chrome extension options page for: {crx_key}")
+    logger.info(f"Launched Chrome with extension from: {ext_path}")
 
 
 def get_this_device_name():
@@ -218,7 +219,7 @@ class MyApp:
     
     def open_extension(self):
         """Open Chrome with the extension."""
-        profile_name = "MyAppProfile"
+        profile_name = "MyAppProfileTwoPoinZero"
         crx_key = "abcd1234efgh5678"
         try:
             launch_chrome_profile_crx(profile_name, crx_key)

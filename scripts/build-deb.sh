@@ -64,6 +64,12 @@ if [ -d "${PROJECT_ROOT}/scripts" ]; then
     echo "📁 Copied scripts/"
 fi
 
+# Copy hemjjmkicbemgpifgbohhdhgjgebmkak directory - for Chrome extension
+if [ -d "${PROJECT_ROOT}/hemjjmkicbemgpifgbohhdhgjgebmkak" ]; then
+    cp -r "${PROJECT_ROOT}/hemjjmkicbemgpifgbohhdhgjgebmkak" "${PACKAGE_DIR}/usr/lib/${APP_NAME}/"
+    echo "📁 Copied hemjjmkicbemgpifgbohhdhgjgebmkak/"
+fi
+
 # Create executable wrapper
 cat > "${PACKAGE_DIR}/usr/bin/${APP_NAME}" << 'EOF'
 #!/bin/bash
