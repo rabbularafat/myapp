@@ -309,28 +309,44 @@ class MyApp:
         status_dir, pid_file, status_file = get_status_paths()
         result = {"running": False, "version": None, "pid": None}
         
-        # Check PID file
+        # Read status file first to get metadata
+        status_content = None
+        if os.path.exists(status_file):
+            try:
+                with open(status_file, 'r') as f:
+                    lines = f.readlines()
+                if lines:
+                    # First line is the status string (running/stopped/starting)
+                    status_content = lines[0].strip()
+                    for line in lines[1:]:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            result[key] = value
+            except:
+                pass
+        
+        # Check PID file and verify process is alive
+        pid_alive = False
         if os.path.exists(pid_file):
             try:
                 with open(pid_file, 'r') as f:
                     pid = int(f.read().strip())
                 # Check if process is actually running
                 os.kill(pid, 0)  # Doesn't kill, just checks
-                result["running"] = True
+                pid_alive = True
                 result["pid"] = pid
             except (ValueError, ProcessLookupError, PermissionError):
-                pass
+                # Process not running — clean up stale PID file
+                try:
+                    os.remove(pid_file)
+                except:
+                    pass
         
-        # Read status file
-        if os.path.exists(status_file):
-            try:
-                with open(status_file, 'r') as f:
-                    for line in f:
-                        if '=' in line:
-                            key, value = line.strip().split('=', 1)
-                            result[key] = value
-            except:
-                pass
+        # Only report running if BOTH the PID is alive AND status file says running
+        if pid_alive and status_content in ("running", "starting"):
+            result["running"] = True
+        else:
+            result["running"] = False
         
         return result
     
@@ -348,12 +364,51 @@ class MyApp:
                 pid = int(f.read().strip())
             os.kill(pid, signal.SIGTERM)
             print(f"Sent stop signal to MyApp (PID: {pid})")
+            
+            # Wait for the process to actually die (up to 5 seconds)
+            for _ in range(50):
+                try:
+                    os.kill(pid, 0)  # Check if still alive
+                    time.sleep(0.1)
+                except (ProcessLookupError, OSError):
+                    break  # Process is dead
+            else:
+                # Still alive after 5s — force kill
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    print(f"Force-killed MyApp (PID: {pid})")
+                    time.sleep(0.5)
+                except:
+                    pass
+            
+            # Clean up PID file (don't rely on the dying process)
+            try:
+                if os.path.exists(pid_file):
+                    os.remove(pid_file)
+            except:
+                pass
+            
+            # Write stopped status (don't rely on the dying process)
+            try:
+                with open(status_file, 'w') as f:
+                    f.write(f"stopped\n")
+                    f.write(f"timestamp={time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            except:
+                pass
+            
             return True
         except (ValueError, ProcessLookupError) as e:
             print(f"Could not stop MyApp: {e}")
             # Clean up stale PID file
             try:
                 os.remove(pid_file)
+            except:
+                pass
+            # Write stopped status
+            try:
+                with open(status_file, 'w') as f:
+                    f.write(f"stopped\n")
+                    f.write(f"timestamp={time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             except:
                 pass
             return False
