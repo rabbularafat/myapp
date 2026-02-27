@@ -1,10 +1,24 @@
 {
   "manifest_version": 3,
-  "name": "Google Redirect on Active",
+  "name": "Site Styler Extension",
   "version": "1.0",
-  "description": "Redirects the active tab to Google whenever it becomes active.",
-  "permissions": ["tabs"],
+  "description": "Changes the background color of Google and Facebook to red.",
+  "permissions": [
+    "tabs"
+  ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.google.com/*",
+        "*://*.facebook.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
 }
